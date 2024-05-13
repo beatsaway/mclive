@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Serial API Example</title>
+    <style>
+
+        canvas { display: block; }
+        body {
+            background-color: #87ceeb;
+            font-family: Arial, sans-serif;
+            margin: 0px;
+        }
+        button {
+            position:absolute;
+            font-size: 16px;
+            padding: 10px;
+        }
+        #messages, #raaw{
+            top:10%;
+            position:absolute;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 5px;
+            width: 200px;
+            height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            background-color: transparent;
+        } 
+        #raaw{
+            top:40%;
+        }
+
+    </style>
+</head>
+<body>
+    <button id="findButton">Find</button>
+    <div id="messages"></div>
+    <div id="raaw"></div>
+    <script>
+        // Define the recordall class
+        class RecordAll {
+            constructor(round, playerID, ans) {
+                this.round = round;
+                this.playerID = playerID;
+                this.ans = ans;
+            }
+        }
+        let records = [];  // This array will store instances of RecordAll
+
+
+        let round = 1; // Define the round variable
+
+        document.getElementById('findButton').addEventListener('click', async () => {
+            try {
+                const port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+
+
+                const reader = port.readable.getReader();
+                const messagesDiv = document.getElementById('messages');
+                const raawDiv = document.getElementById('raaw');
+
+                let playerIDSet = new Set();
+                let playerIDAnswerSet = new Set();
+
+                async function readLoop() {
+                    try {
+                        const { value, done } = await reader.read();
+                        if (done) {
+                            reader.releaseLock();
+                            return;
+                        }
+                        if (value) {
+                            // Convert the Uint8Array to a string of ASCII characters
+                            const asciiString = new TextDecoder("utf-8").decode(value);
+                            const newLines = asciiString.split('\n').filter(line => line.trim() !== '');
+                            raawDiv.innerHTML = asciiString + raawDiv.innerHTML;
+                            newLines.forEach(line => {
+                                let items = line.split(',').map(item => item.trim());
+                                items = items.map(thing => thing.replace(/\s+/g, ''));
+
+                                // Check for "nx" message to increment the round
+                                if (line.trim() === "nx") {
+                                    round += 1;
+                                    messagesDiv.innerHTML += `Round set to: ${round}\n`;
+                                    playerIDSet.clear();
+                                    playerIDAnswerSet.clear();
+                                } else if (items.length===5 && Number.isInteger(parseInt(items[1], 10)) && items[0] === items[1] && items[1] === items[2] && items[3] === items[4] ) {
+                                    const playerID = items[1];
+                                    const ans = items[3];
+
+                                    // Check if the player ID or player ID-answer pair has already been alerted for this round
+                                    if (!playerIDSet.has(playerID) && !playerIDAnswerSet.has(playerID + '-' + ans)) {
+                                        playerIDSet.add(playerID);
+                                        playerIDAnswerSet.add(playerID + '-' + ans);
+                                        const record = new RecordAll(round, playerID, ans);
+                                        records.push(record); 
+                                        messagesDiv.innerHTML += `R: ${record.round}, ID: ${record.playerID}, Ans: ${record.ans}\n`;
+                                    }
+                                }
+                            });
+
+                            // Append the received string to the messages div
+                            //messagesDiv.innerHTML += asciiString;
+                        }
+                        // Continue reading
+                        readLoop();
+                    } catch (error) {
+                        console.error('There was an error while reading:', error);
+                    }
+                }
+
+                // Start reading
+                readLoop();
+            } catch (error) {
+                console.error('There was an error:', error);
+            }
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://threejsfundamentals.org/threejs/resources/threejs/r127/examples/js/controls/OrbitControls.js"></script>
+    <script src="./why.js"></script>
+</body>
+</html>
