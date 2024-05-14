@@ -37,7 +37,7 @@ class SceneSetup {
         this.controls.screenSpacePanning = true;
         this.controls.rotateSpeed = 0.7;
 
-        this.camera.position.set(0, 50, 30);
+        this.camera.position.set(0, 20, 25);
         this.camera.lookAt(new THREE.Vector3(0, 0, 0));
 
         this.humanoids = [];
@@ -59,10 +59,10 @@ class SceneSetup {
 
     addPlanes() {
         // Grey plane at y=0
-        const greyPlaneGeometry = new THREE.PlaneGeometry(80, 80);
+        const greyPlaneGeometry = new THREE.PlaneGeometry(30, 30);
         const greyPlaneMaterial = new THREE.MeshLambertMaterial({ color: 0x808080 });
         const greyPlane = new THREE.Mesh(greyPlaneGeometry, greyPlaneMaterial);
-        greyPlane.position.y = 0;
+        greyPlane.position.y = -2;
         greyPlane.rotation.x = -Math.PI / 2;
         greyPlane.receiveShadow = true;
         this.scene.add(greyPlane);
@@ -201,10 +201,10 @@ class Humanoid {
         this.group.position.z += this.randomMoveZ;
 
         // Boundary check to keep humanoid within the meadow (assuming meadow size is 80x80 centered at (0,0))
-        if (this.group.position.x > 40 || this.group.position.x < -40) {
+        if (this.group.position.x > 15 || this.group.position.x < -15) {
             this.randomMoveX *= -1;
         }
-        if (this.group.position.z > 40 || this.group.position.z < -40) {
+        if (this.group.position.z > 15 || this.group.position.z < -15) {
             this.randomMoveZ *= -1;
         }
     }
@@ -222,9 +222,9 @@ function addHumanoids(records, sceneSetup) {
 
         const humanoidObj = humanoid.getObject();
         humanoidObj.position.set(
-            Math.random() * 80 - 40, // Random X position within meadow
+            Math.random() * 30, // Random X position within meadow
             0,
-            Math.random() * 80 - 40  // Random Z position within meadow
+            Math.random() * 30  // Random Z position within meadow
         );
 
         sceneSetup.scene.add(humanoidObj);
