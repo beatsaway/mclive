@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Serial API Example</title>
     <style>
-
         canvas { display: block; }
         body {
             background-color: #87ceeb;
@@ -13,13 +12,13 @@
             margin: 0px;
         }
         button {
-            position:absolute;
+            position: absolute;
             font-size: 16px;
             padding: 10px;
         }
-        #messages, #raaw{
-            top:10%;
-            position:absolute;
+        #messages, #raaw {
+            top: 10%;
+            position: absolute;
             margin-top: 20px;
             border: 1px solid #ccc;
             padding: 5px;
@@ -28,19 +27,49 @@
             overflow-y: auto;
             white-space: pre-wrap;
             background-color: transparent;
-        } 
-        #raaw{
-            top:40%;
         }
-
+        #raaw {
+            top: 40%;
+        }
+        table {
+            position: absolute;
+            left: 13%;
+            width: 86%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .delete-icon {
+            cursor: pointer;
+            font-size: 18px;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
+
     <button id="findButton">Find</button>
     <div id="messages"></div>
     <div id="raaw"></div>
+    <div>
+        <table id="answersTable">
+            <thead>
+                <tr id="headerRow">
+                    <th>Player ID</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
     <script>
-        // Define the recordall class
         class RecordAll {
             constructor(round, playerID, ans) {
                 this.round = round;
@@ -48,20 +77,20 @@
                 this.ans = ans;
             }
         }
-        let records = [];  // This array will store instances of RecordAll
-
-
-        let round = 1; // Define the round variable
+        let records = [];
+        let round = 0;
 
         document.getElementById('findButton').addEventListener('click', async () => {
             try {
                 const port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });
 
-
                 const reader = port.readable.getReader();
                 const messagesDiv = document.getElementById('messages');
                 const raawDiv = document.getElementById('raaw');
+                const answersTable = document.getElementById('answersTable');
+                const answersTableBody = document.querySelector('#answersTable tbody');
+                const answersTableHead = document.querySelector('#headerRow');
 
                 let playerIDSet = new Set();
                 let playerIDAnswerSet = new Set();
@@ -74,7 +103,6 @@
                             return;
                         }
                         if (value) {
-                            // Convert the Uint8Array to a string of ASCII characters
                             const asciiString = new TextDecoder("utf-8").decode(value);
                             const newLines = asciiString.split('\n').filter(line => line.trim() !== '');
                             raawDiv.innerHTML = asciiString + raawDiv.innerHTML;
@@ -82,43 +110,191 @@
                                 let items = line.split(',').map(item => item.trim());
                                 items = items.map(thing => thing.replace(/\s+/g, ''));
 
-                                // Check for "nx" message to increment the round
                                 if (line.trim() === "nx") {
                                     round += 1;
                                     messagesDiv.innerHTML += `Round set to: ${round}\n`;
                                     playerIDSet.clear();
                                     playerIDAnswerSet.clear();
-                                } else if (items.length===5 && Number.isInteger(parseInt(items[1], 10)) && items[0] === items[1] && items[1] === items[2] && items[3] === items[4] ) {
+                                    addRoundColumn(round);
+                                } else if (items.length === 5 && Number.isInteger(parseInt(items[1], 10)) && items[0] === items[1] && items[1] === items[2] && items[3] === items[4]) {
                                     const playerID = items[1];
                                     const ans = items[3];
 
-                                    // Check if the player ID or player ID-answer pair has already been alerted for this round
                                     if (!playerIDSet.has(playerID) && !playerIDAnswerSet.has(playerID + '-' + ans)) {
                                         playerIDSet.add(playerID);
                                         playerIDAnswerSet.add(playerID + '-' + ans);
                                         const record = new RecordAll(round, playerID, ans);
-                                        records.push(record); 
+                                        records.push(record);
                                         messagesDiv.innerHTML += `R: ${record.round}, ID: ${record.playerID}, Ans: ${record.ans}\n`;
+                                        updateTable(record);
                                     }
                                 }
                             });
-
-                            // Append the received string to the messages div
-                            //messagesDiv.innerHTML += asciiString;
                         }
-                        // Continue reading
                         readLoop();
                     } catch (error) {
                         console.error('There was an error while reading:', error);
                     }
                 }
 
-                // Start reading
+                function addRoundColumn(round) {
+                    const newHeader = document.createElement('th');
+                    newHeader.innerHTML = `Round ${round} <input type="text" maxlength="1" size="1" data-round="${round}"> <span class="delete-icon" data-round="${round}">❌</span>`;
+                    answersTableHead.appendChild(newHeader);
+
+                    // Add empty cells for existing players for the new round column
+                    const rows = answersTableBody.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const newCell = document.createElement('td');
+                        row.appendChild(newCell);
+                    });
+
+                    // Add event listener for the new input box
+                    newHeader.querySelector('input').addEventListener('input', function() {
+                        const value = this.value.toUpperCase();
+                        const roundIndex = this.getAttribute('data-round');
+                        highlightCells(roundIndex, value);
+                    });
+
+                    // Add event listener for the new delete button
+                    newHeader.querySelector('.delete-icon').addEventListener('click', function() {
+                        const roundIndex = this.getAttribute('data-round');
+                        deleteRoundColumn(roundIndex);
+                    });
+                }
+
+                function highlightCells(roundIndex, value) {
+                    const columnIndex = parseInt(roundIndex, 10);
+                    const rows = answersTableBody.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const cell = row.children[columnIndex];
+                        if (cell && cell.textContent.toUpperCase() === value) {
+                            cell.style.backgroundColor = '#90EE90';
+                        } else {
+                            cell.style.backgroundColor = '';
+                        }
+                    });
+                    updatePlayerGreenCounts();
+                }
+
+                function deleteRoundColumn(roundIndex) {
+                    const columnIndex = parseInt(roundIndex, 10);
+
+                    // Remove the header cell
+                    const headerCell = answersTableHead.querySelector(`th:nth-child(${columnIndex + 1})`);
+                    if (headerCell) {
+                        headerCell.remove();
+                    }
+
+                    // Remove the corresponding cells in the body rows
+                    const rows = answersTableBody.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const cell = row.querySelector(`td:nth-child(${columnIndex + 1})`);
+                        if (cell) {
+                            cell.remove();
+                        }
+                    });
+
+                    // Adjust the data-round attribute for all subsequent header cells and delete icons
+                    const headerCells = answersTableHead.querySelectorAll('th');
+                    headerCells.forEach((headerCell, index) => {
+                        if (index >= columnIndex) {
+                            const round = index;
+                            headerCell.innerHTML = `Round ${round} <input type="text" maxlength="1" size="1" data-round="${round}"> <span class="delete-icon" data-round="${round}">❌</span>`;
+
+                            headerCell.querySelector('input').addEventListener('input', function() {
+                                const value = this.value.toUpperCase();
+                                const roundIndex = this.getAttribute('data-round');
+                                highlightCells(roundIndex, value);
+                            });
+
+                            headerCell.querySelector('.delete-icon').addEventListener('click', function() {
+                                const roundIndex = this.getAttribute('data-round');
+                                deleteRoundColumn(roundIndex);
+                            });
+                        }
+                    });
+
+                    // Remove records of the deleted round
+                    records = records.filter(record => record.round != columnIndex);
+
+                    // Update rounds of remaining records
+                    records.forEach(record => {
+                        if (record.round > columnIndex) {
+                            record.round -= 1;
+                        }
+                    });
+
+                    round -= 1;
+                    updatePlayerGreenCounts();
+                }
+
+                function updateTable(record) {
+                    let playerRow = document.querySelector(`#row-${record.playerID}`);
+                    if (!playerRow) {
+                        playerRow = document.createElement('tr');
+                        playerRow.id = `row-${record.playerID}`;
+                        const playerIDCell = document.createElement('td');
+                        playerIDCell.textContent = `${record.playerID} (0)`;
+                        playerRow.appendChild(playerIDCell);
+
+                        // Add empty cells for previous rounds
+                        for (let i = 1; i <= round; i++) {
+                            const emptyCell = document.createElement('td');
+                            playerRow.appendChild(emptyCell);
+                        }
+
+                        answersTableBody.appendChild(playerRow);
+
+                        // Add humanoid with the new player ID
+                        addHumanoid(record.playerID);
+                    }
+
+                    // Fill the answer in the correct round column
+                    const roundIndex = record.round;
+                    if (playerRow.children[roundIndex]) {
+                        playerRow.children[roundIndex].textContent = record.ans;
+                    } else {
+                        const answerCell = document.createElement('td');
+                        answerCell.textContent = record.ans;
+                        playerRow.appendChild(answerCell);
+                    }
+
+                    updatePlayerGreenCounts();
+                }
+
+                function updatePlayerGreenCounts() {
+                    const rows = answersTableBody.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const playerIDCell = row.children[0];
+                        const greenCount = Array.from(row.children).slice(1).filter(cell => cell.style.backgroundColor === 'rgb(144, 238, 144)').length;
+                        playerIDCell.textContent = `${playerIDCell.textContent.split(' ')[0]} (${greenCount})`;
+                    });
+                }
+
                 readLoop();
             } catch (error) {
                 console.error('There was an error:', error);
             }
         });
+
+        // Function to add a humanoid
+        function addHumanoid(playerID) {
+            const headColor = 0xffcc00; // Yellow head
+            const bodyColor = 0x336699; // Blue body
+            const feetColor = 0xcc3333; // Red feet
+            const humanoid = new Humanoid(playerID, headColor, bodyColor, feetColor);
+
+            const humanoidObj = humanoid.getObject();
+            humanoidObj.position.set(
+                Math.random() * 80 - 40, // Random X position within meadow
+                0,
+                Math.random() * 80 - 40  // Random Z position within meadow
+            );
+
+            sceneSetup.scene.add(humanoidObj);
+            sceneSetup.humanoids.push(humanoid);
+        }
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
