@@ -9,6 +9,8 @@
         body {
             background-color: #87ceeb;
             font-family: Arial, sans-serif;
+            font-size: 14px;
+            padding: 0px;
             margin: 0px;
         }
         button {
@@ -22,8 +24,9 @@
             margin-top: 20px;
             border: 1px solid #ccc;
             padding: 5px;
-            width: 200px;
+            width: 120px;
             height: 200px;
+            font-size: 9px;
             overflow-y: auto;
             white-space: pre-wrap;
             background-color: transparent;
@@ -116,6 +119,7 @@
                                     playerIDSet.clear();
                                     playerIDAnswerSet.clear();
                                     addRoundColumn(round);
+                                    golava=false;
                                 } else if (items.length === 5 && Number.isInteger(parseInt(items[1], 10)) && items[0] === items[1] && items[1] === items[2] && items[3] === items[4]) {
                                     const playerID = items[1];
                                     const ans = items[3];
@@ -162,19 +166,41 @@
                         deleteRoundColumn(roundIndex);
                     });
                 }
+                let golava=false;
 
                 function highlightCells(roundIndex, value) {
+                    golava=true;
+
                     const columnIndex = parseInt(roundIndex, 10);
                     const rows = answersTableBody.querySelectorAll('tr');
                     rows.forEach(row => {
                         const cell = row.children[columnIndex];
                         if (cell && cell.textContent.toUpperCase() === value) {
-                            cell.style.backgroundColor = '#90EE90';
+                            cell.style.backgroundColor = 'rgba(144, 238, 144, 0.5)'; // Semi-transparent green
                         } else {
-                            cell.style.backgroundColor = '';
+                            cell.style.backgroundColor = 'rgba(255, 200, 203, 0.5)'; // Semi-transparent red
+                            
                         }
                     });
                     updatePlayerGreenCounts();
+                    updateHumanoidPositions();
+                }
+                function updateHumanoidPositions() {
+                    const columnIndex = round; // Use the latest round index
+                    const rows = document.querySelectorAll('#answersTable tbody tr');
+                    rows.forEach(row => {
+                        const playerIDCell = row.children[0];
+                        const playerID = playerIDCell.textContent.split(' ')[0];
+                        const cell = row.children[columnIndex];
+                        const humanoid = sceneSetup.humanoids.find(h => h.playID === playerID);
+                        if (humanoid) {
+                            if (golava && cell && cell.style.backgroundColor === 'rgba(255, 200, 203, 0.5)') { // Red
+                                humanoid.group.position.y = -5;
+                            } else {
+                                humanoid.group.position.y = 0;
+                            }
+                        }
+                    });
                 }
 
                 function deleteRoundColumn(roundIndex) {
@@ -281,19 +307,22 @@
         // Function to add a humanoid
         function addHumanoid(playerID) {
             const headColor = 0xffcc00; // Yellow head
-            const bodyColor = 0x336699; // Blue body
+            const bodyColor = getRandomColor(); // Blue body
             const feetColor = 0xcc3333; // Red feet
             const humanoid = new Humanoid(playerID, headColor, bodyColor, feetColor);
 
             const humanoidObj = humanoid.getObject();
-            humanoidObj.position.set(
-                Math.random() * 80 - 40, // Random X position within meadow
-                0,
-                Math.random() * 80 - 40  // Random Z position within meadow
-            );
 
             sceneSetup.scene.add(humanoidObj);
             sceneSetup.humanoids.push(humanoid);
+        }
+        function getRandomColor() {
+          var letters = '0123456789ABCDEF';
+          var color = '#';
+          for (var i = 0; i < 6; i++) {
+            color += letters[Math.floor(Math.random() * 16)];
+          }
+          return color;
         }
     </script>
 
