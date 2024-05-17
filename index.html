@@ -5,83 +5,153 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Serial API Example</title>
     <style>
-        canvas { display: block; }
         body {
             background-color: #87ceeb;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
+            font-family: Cambria, sans-serif;
+            font-size: 48px;
+            padding: 0;
+            margin: 0;
+        }
+        button {
+            font-size: 16px;
             padding: 0px;
             margin: 0px;
         }
-        button {
-            position: absolute;
-            font-size: 16px;
-            padding: 10px;
-        }
-        #messages, #raaw {
-            top: 10%;
-            position: absolute;
-            margin-top: 20px;
-            border: 1px solid #ccc;
-            padding: 5px;
-            width: 120px;
-            height: 200px;
-            font-size: 9px;
+        #messages {
+            margin: 0px;
+            border: 1px solid #555;
+            padding: 0px;
+            width: 98%;
+            height: 100px;
+            font-size: 14px;
             overflow-y: auto;
             white-space: pre-wrap;
-            background-color: transparent;
-        }
-        #raaw {
-            top: 40%;
+            background-color: #fff;
         }
         table {
-            position: absolute;
-            left: 13%;
-            width: 86%;
+            width: auto;
+            margin: 5px;
             border-collapse: collapse;
+            font-size: 48px;
         }
         th, td {
-            border: 1px solid #ccc;
+            border: 1px solid #444;
             padding: 8px;
-            text-align: left;
+            text-align: center;
+            width: 80px;
         }
         th {
             background-color: #f2f2f2;
         }
-        .delete-icon {
-            cursor: pointer;
-            font-size: 18px;
-            margin-left: 5px;
+        .player-id {
+            text-align: right; /* Align Player ID cells to the right */
+        }
+        .light-green {
+            background-color: lightgreen;
+        }
+        .light-red {
+            background-color: lightcoral;
         }
     </style>
 </head>
 <body>
 
-    <button id="findButton">Find</button>
     <div id="messages"></div>
-    <div id="raaw"></div>
-    <div>
-        <table id="answersTable">
-            <thead>
-                <tr id="headerRow">
-                    <th>Player ID</th>
-                </tr>
-            </thead>
-            <tbody>
-            </tbody>
-        </table>
-    </div>
+    <button id="findButton">Find Serial Device</button>
+    <button id="addRoundButton">Add Round</button>
+
+    <table id="answersTable">
+        <thead>
+            <tr>
+                <th class="player-id">Player</th>
+                <th>Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Rows will be added here by JavaScript -->
+        </tbody>
+    </table>
 
     <script>
-        class RecordAll {
-            constructor(round, playerID, ans) {
-                this.round = round;
-                this.playerID = playerID;
-                this.ans = ans;
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const answersTableBody = document.querySelector('#answersTable tbody');
+            for (let i = 0; i < 25; i++) {
+                const playerID = ("000" + i).slice(-4);
+                const row = document.createElement('tr');
+                row.setAttribute('data-player-id', playerID);
+
+                // Create Player ID cell
+                const idCell = document.createElement('td');
+                idCell.textContent = parseInt(playerID, 10);
+                idCell.classList.add('player-id'); // Add player-id class for right alignment
+                row.appendChild(idCell);
+
+                // Create Score cell
+                const scoreCell = document.createElement('td');
+                scoreCell.classList.add('score');
+                scoreCell.textContent = '0';
+                row.appendChild(scoreCell);
+
+                answersTableBody.appendChild(row);
+            }
+
+            currentRound = 1;
+            addRoundColumn(currentRound);
+        });
+
+        let currentRound = 0;
+
+        document.getElementById('addRoundButton').addEventListener('click', () => {
+            currentRound += 1;
+            addRoundColumn(currentRound);
+        });
+
+        function addRoundColumn(round) {
+            const answersTableHead = document.querySelector('#answersTable thead tr');
+            const newHeader = document.createElement('th');
+
+            // Create the select list, OK button, and close button
+            const selectList = document.createElement('select');
+            ['A', 'B', 'C', 'D'].forEach(grade => {
+                const option = document.createElement('option');
+                option.value = grade;
+                option.text = grade;
+                selectList.appendChild(option);
+            });
+
+            const okButton = document.createElement('button');
+            okButton.textContent = 'OK';
+            okButton.addEventListener('click', () => {
+                highlightCells(round, selectList.value);
+                makeColumnImmutable(round);
+                updateScores();
+            });
+
+            const closeButton = document.createElement('button');
+            closeButton.textContent = 'x';
+            closeButton.addEventListener('click', () => deleteColumn(round));
+
+            newHeader.appendChild(selectList);
+            newHeader.appendChild(okButton);
+            newHeader.appendChild(closeButton);
+            answersTableHead.appendChild(newHeader);
+
+            const rows = document.querySelectorAll('#answersTable tbody tr');
+            rows.forEach(row => {
+                const newCell = document.createElement('td');
+                row.appendChild(newCell);
+            });
+        }
+
+        function convertToLetterGrade(Ans) {
+            switch (Ans) {
+                case '0': return 'A';
+                case '1': return 'B';
+                case '2': return 'C';
+                case '3': return 'D';
+                default: return '';
             }
         }
-        let records = [];
-        let round = 0;
 
         document.getElementById('findButton').addEventListener('click', async () => {
             try {
@@ -90,13 +160,7 @@
 
                 const reader = port.readable.getReader();
                 const messagesDiv = document.getElementById('messages');
-                const raawDiv = document.getElementById('raaw');
-                const answersTable = document.getElementById('answersTable');
                 const answersTableBody = document.querySelector('#answersTable tbody');
-                const answersTableHead = document.querySelector('#headerRow');
-
-                let playerIDSet = new Set();
-                let playerIDAnswerSet = new Set();
 
                 async function readLoop() {
                     try {
@@ -107,30 +171,23 @@
                         }
                         if (value) {
                             const asciiString = new TextDecoder("utf-8").decode(value);
+                            messagesDiv.innerHTML += asciiString + '\n';
+
                             const newLines = asciiString.split('\n').filter(line => line.trim() !== '');
-                            raawDiv.innerHTML = asciiString + raawDiv.innerHTML;
                             newLines.forEach(line => {
-                                let items = line.split(',').map(item => item.trim());
-                                items = items.map(thing => thing.replace(/\s+/g, ''));
+                                const [ID, Ans] = line.split(',').map(item => item.trim());
 
-                                if (line.trim() === "nx") {
-                                    round += 1;
-                                    messagesDiv.innerHTML += `Round set to: ${round}\n`;
-                                    playerIDSet.clear();
-                                    playerIDAnswerSet.clear();
-                                    addRoundColumn(round);
-                                    golava=false;
-                                } else if (items.length === 5 && Number.isInteger(parseInt(items[1], 10)) && items[0] === items[1] && items[1] === items[2] && items[3] === items[4]) {
-                                    const playerID = items[1];
-                                    const ans = items[3];
+                                // Validate the answer
+                                if (!['0', '1', '2', '3'].includes(Ans)) {
+                                    return;
+                                }
 
-                                    if (!playerIDSet.has(playerID) && !playerIDAnswerSet.has(playerID + '-' + ans)) {
-                                        playerIDSet.add(playerID);
-                                        playerIDAnswerSet.add(playerID + '-' + ans);
-                                        const record = new RecordAll(round, playerID, ans);
-                                        records.push(record);
-                                        messagesDiv.innerHTML += `R: ${record.round}, ID: ${record.playerID}, Ans: ${record.ans}\n`;
-                                        updateTable(record);
+                                const row = answersTableBody.querySelector(`tr[data-player-id="${ID}"]`);
+                                if (row) {
+                                    const cells = row.querySelectorAll('td');
+                                    const latestCell = cells[cells.length - 1];
+                                    if (latestCell.cellIndex > 0) { // Ensure there's at least one round column
+                                        latestCell.textContent = convertToLetterGrade(Ans);
                                     }
                                 }
                             });
@@ -141,193 +198,68 @@
                     }
                 }
 
-                function addRoundColumn(round) {
-                    const newHeader = document.createElement('th');
-                    newHeader.innerHTML = `Round ${round} <input type="text" maxlength="1" size="1" data-round="${round}"> <span class="delete-icon" data-round="${round}">❌</span>`;
-                    answersTableHead.appendChild(newHeader);
-
-                    // Add empty cells for existing players for the new round column
-                    const rows = answersTableBody.querySelectorAll('tr');
-                    rows.forEach(row => {
-                        const newCell = document.createElement('td');
-                        row.appendChild(newCell);
-                    });
-
-                    // Add event listener for the new input box
-                    newHeader.querySelector('input').addEventListener('input', function() {
-                        const value = this.value.toUpperCase();
-                        const roundIndex = this.getAttribute('data-round');
-                        highlightCells(roundIndex, value);
-                    });
-
-                    // Add event listener for the new delete button
-                    newHeader.querySelector('.delete-icon').addEventListener('click', function() {
-                        const roundIndex = this.getAttribute('data-round');
-                        deleteRoundColumn(roundIndex);
-                    });
-                }
-                let golava=false;
-
-                function highlightCells(roundIndex, value) {
-                    golava=true;
-
-                    const columnIndex = parseInt(roundIndex, 10);
-                    const rows = answersTableBody.querySelectorAll('tr');
-                    rows.forEach(row => {
-                        const cell = row.children[columnIndex];
-                        if (cell && cell.textContent.toUpperCase() === value) {
-                            cell.style.backgroundColor = 'rgba(144, 238, 144, 0.5)'; // Semi-transparent green
-                        } else {
-                            cell.style.backgroundColor = 'rgba(255, 200, 203, 0.5)'; // Semi-transparent red
-                            
-                        }
-                    });
-                    updatePlayerGreenCounts();
-                    updateHumanoidPositions();
-                }
-                function updateHumanoidPositions() {
-                    const columnIndex = round; // Use the latest round index
-                    const rows = document.querySelectorAll('#answersTable tbody tr');
-                    rows.forEach(row => {
-                        const playerIDCell = row.children[0];
-                        const playerID = playerIDCell.textContent.split(' ')[0];
-                        const cell = row.children[columnIndex];
-                        const humanoid = sceneSetup.humanoids.find(h => h.playID === playerID);
-                        if (humanoid) {
-                            if (golava && cell && cell.style.backgroundColor === 'rgba(255, 200, 203, 0.5)') { // Red
-                                humanoid.group.position.y = -5;
-                            } else {
-                                humanoid.group.position.y = 0;
-                            }
-                        }
-                    });
-                }
-
-                function deleteRoundColumn(roundIndex) {
-                    const columnIndex = parseInt(roundIndex, 10);
-
-                    // Remove the header cell
-                    const headerCell = answersTableHead.querySelector(`th:nth-child(${columnIndex + 1})`);
-                    if (headerCell) {
-                        headerCell.remove();
-                    }
-
-                    // Remove the corresponding cells in the body rows
-                    const rows = answersTableBody.querySelectorAll('tr');
-                    rows.forEach(row => {
-                        const cell = row.querySelector(`td:nth-child(${columnIndex + 1})`);
-                        if (cell) {
-                            cell.remove();
-                        }
-                    });
-
-                    // Adjust the data-round attribute for all subsequent header cells and delete icons
-                    const headerCells = answersTableHead.querySelectorAll('th');
-                    headerCells.forEach((headerCell, index) => {
-                        if (index >= columnIndex) {
-                            const round = index;
-                            headerCell.innerHTML = `Round ${round} <input type="text" maxlength="1" size="1" data-round="${round}"> <span class="delete-icon" data-round="${round}">❌</span>`;
-
-                            headerCell.querySelector('input').addEventListener('input', function() {
-                                const value = this.value.toUpperCase();
-                                const roundIndex = this.getAttribute('data-round');
-                                highlightCells(roundIndex, value);
-                            });
-
-                            headerCell.querySelector('.delete-icon').addEventListener('click', function() {
-                                const roundIndex = this.getAttribute('data-round');
-                                deleteRoundColumn(roundIndex);
-                            });
-                        }
-                    });
-
-                    // Remove records of the deleted round
-                    records = records.filter(record => record.round != columnIndex);
-
-                    // Update rounds of remaining records
-                    records.forEach(record => {
-                        if (record.round > columnIndex) {
-                            record.round -= 1;
-                        }
-                    });
-
-                    round -= 1;
-                    updatePlayerGreenCounts();
-                }
-
-                function updateTable(record) {
-                    let playerRow = document.querySelector(`#row-${record.playerID}`);
-                    if (!playerRow) {
-                        playerRow = document.createElement('tr');
-                        playerRow.id = `row-${record.playerID}`;
-                        const playerIDCell = document.createElement('td');
-                        playerIDCell.textContent = `${record.playerID} (0)`;
-                        playerRow.appendChild(playerIDCell);
-
-                        // Add empty cells for previous rounds
-                        for (let i = 1; i <= round; i++) {
-                            const emptyCell = document.createElement('td');
-                            playerRow.appendChild(emptyCell);
-                        }
-
-                        answersTableBody.appendChild(playerRow);
-
-                        // Add humanoid with the new player ID
-                        addHumanoid(record.playerID);
-                    }
-
-                    // Fill the answer in the correct round column
-                    const roundIndex = record.round;
-                    if (playerRow.children[roundIndex]) {
-                        playerRow.children[roundIndex].textContent = record.ans;
-                    } else {
-                        const answerCell = document.createElement('td');
-                        answerCell.textContent = record.ans;
-                        playerRow.appendChild(answerCell);
-                    }
-
-                    updatePlayerGreenCounts();
-                }
-
-                function updatePlayerGreenCounts() {
-                    const rows = answersTableBody.querySelectorAll('tr');
-                    rows.forEach(row => {
-                        const playerIDCell = row.children[0];
-                        const greenCount = Array.from(row.children).slice(1).filter(cell => cell.style.backgroundColor === 'rgb(144, 238, 144)').length;
-                        playerIDCell.textContent = `${playerIDCell.textContent.split(' ')[0]} (${greenCount})`;
-                    });
-                }
-
                 readLoop();
             } catch (error) {
                 console.error('There was an error:', error);
             }
         });
 
-        // Function to add a humanoid
-        function addHumanoid(playerID) {
-            const headColor = 0xffcc00; // Yellow head
-            const bodyColor = getRandomColor(); // Blue body
-            const feetColor = 0xcc3333; // Red feet
-            const humanoid = new Humanoid(playerID, headColor, bodyColor, feetColor);
-
-            const humanoidObj = humanoid.getObject();
-
-            sceneSetup.scene.add(humanoidObj);
-            sceneSetup.humanoids.push(humanoid);
+        function highlightCells(round, selectedGrade) {
+            const rows = document.querySelectorAll('#answersTable tbody tr');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const targetCell = cells[round + 1]; // Adjusted for Player ID and Score columns
+                if (targetCell) {
+                    if (targetCell.textContent === selectedGrade) {
+                        targetCell.classList.add('light-green');
+                        targetCell.classList.remove('light-red');
+                    } else {
+                        targetCell.classList.add('light-red');
+                        targetCell.classList.remove('light-green');
+                    }
+                }
+            });
         }
-        function getRandomColor() {
-          var letters = '0123456789ABCDEF';
-          var color = '#';
-          for (var i = 0; i < 6; i++) {
-            color += letters[Math.floor(Math.random() * 16)];
-          }
-          return color;
+
+        function updateScores() {
+            const rows = document.querySelectorAll('#answersTable tbody tr');
+            rows.forEach(row => {
+                const greenCells = row.querySelectorAll('.light-green').length;
+                const scoreCell = row.querySelector('.score');
+                if (scoreCell) {
+                    scoreCell.textContent = greenCells;
+                }
+            });
+        }
+
+        function deleteColumn(round) {
+            const answersTableHead = document.querySelector('#answersTable thead tr');
+            const headers = answersTableHead.querySelectorAll('th');
+            if (headers[round + 1]) { // Adjusted for Player ID and Score columns
+                headers[round + 1].remove();
+            }
+
+            const rows = document.querySelectorAll('#answersTable tbody tr');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells[round + 1]) { // Adjusted for Player ID and Score columns
+                    cells[round + 1].remove();
+                }
+            });
+
+            updateScores(); // Update scores after column deletion
+        }
+
+        function makeColumnImmutable(round) {
+            const rows = document.querySelectorAll('#answersTable tbody tr');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const targetCell = cells[round + 1]; // Adjusted for Player ID and Score columns
+                if (targetCell) {
+                    targetCell.classList.add('immutable');
+                }
+            });
         }
     </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://threejsfundamentals.org/threejs/resources/threejs/r127/examples/js/controls/OrbitControls.js"></script>
-    <script src="./why.js"></script>
 </body>
 </html>
